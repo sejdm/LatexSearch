@@ -5,4 +5,4 @@ import System.Environment
 
 main :: IO ()
 main = do a <- getArgs
-          searchLatex "/home/shane/Dropbox/Algebraic Knots/gluingAll.tex" a
+          searchLatex "/home/shane/test.txt" a
