@@ -1,16 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 module LatexSearch (
-    pbegin
-  , pend
-  , penv
-  , ppar
-  , platexblock
-  , platex
-  , attoToPipe
-  , latexPipe
-  , latexFile
-  , searchLatex
-  , isTheorem
+   searchLatex
     )
   where
 
@@ -35,32 +25,25 @@ platex = many platexblock
 data MyLatex = LatexEnv Text Text | LatexPar Text deriving (Show)
 
 
-attoToPipe :: Monad m => Parser MyLatex -> Text -> Pipe Text MyLatex m ()
-attoToPipe f t = do case parse f t of
-                      Done i r -> yield r >> attoToPipe f i
+pipeMany :: Monad m => Parser MyLatex -> Text -> Pipe Text MyLatex m ()
+pipeMany f t = do case parse f t of
+                      Done i r -> yield r >> pipeMany f i
                       Partial g -> partialParse g
   where partialParse g = do x <- await
                             case g x of
-                              Done i r -> yield r >> attoToPipe f i
+                              Done i r -> yield r >> pipeMany f i
                               Partial g' -> partialParse g'
 
 
+latexParsePipe :: Monad m => Pipe Text MyLatex m ()
+latexParsePipe = pipeMany platexblock ""
 
-attoToPip' :: Monad m => Parser MyLatex -> Text -> Pipe Text MyLatex m ()
-attoToPip' f t = do x <- await
-                    case parse f (t `append`  x) of
-                      Done i r -> yield r >> attoToPip' f i
-                      Partial _ -> do y <- await
-                                      attoToPip' f (t `append`  x `append` y)
 
-mymap f = forever $ do x <- await
-                       yield $ f x
+pipeMap f = forever $ do x <- await
+                         yield $ f x
 
 render (LatexEnv n t) = DT.map C.toUpper n `append` ": " `append` t `append` "\n\n"
 render (LatexPar t) = "Par:" `append` t `append` "\n\n"
-
-latexPipe :: Monad m => Pipe Text MyLatex m ()
-latexPipe = attoToPipe platexblock ""
 
 isTheorem (LatexEnv _ _) = True
 isTheorem _ = False
@@ -71,8 +54,6 @@ getText (LatexEnv _ x) = x
 checkWords xs t = Prelude.all (`DT.isInfixOf` (getText t)) $ Prelude.map pack xs
 
 
-latexFile f = runSafeT $ runEffect (T.readFile f >-> latexPipe >-> PI.filter isTheorem >-> mymap (render) >-> T.stdout)
+searchLatex f xs = runSafeT $ runEffect (T.readFile f >-> latexParsePipe >-> PI.filter (checkWords xs) >-> pipeMap (render) >-> T.stdout)
 
-searchLatex f xs = runSafeT $ runEffect (T.readFile f >-> latexPipe >-> PI.filter (checkWords xs) >-> mymap (render) >-> T.stdout)
-
---latexFile f = do Partial f <- parse platex <$> TO.readFile f; let Done _ r = f "" in M.mapM_ (Prelude.putStrLn . Prelude.show . render) $ Prelude.filter isTheorem r
+--checkParser f = do Partial f <- parse platex <$> TO.readFile f; let Done _ r = f "" in M.mapM_ (Prelude.putStrLn . Prelude.show . render) $ Prelude.filter isTheorem r
