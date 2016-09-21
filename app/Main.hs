@@ -5,4 +5,4 @@ import System.Environment
 
 main :: IO ()
 main = do a <- getArgs
-          searchLatex "/home/shane/test.txt" a
+          searchLatexDir "/home/shane/Dropbox/mynotes/" a
