@@ -83,11 +83,20 @@ isEnvKey x = Prelude.any (L.isInfixOf x) ["definition", "theorem", "lemma", "pro
 getName (LatexPar _) = Nothing
 getName (LatexEnv n _) = Just (Prelude.show n)
 
+checkWords as (TheoremProof t t') = Prelude.all (`DT.isInfixOf` (getText t `append` getText t')) $ Prelude.map pack as
 checkWords a@(x:xs) t | isEnvKey x = ((L.isInfixOf x <$> getName t) == Just True) && (Prelude.all (`DT.isInfixOf` (getText t)) $ Prelude.map pack xs)
                       | otherwise = Prelude.all (`DT.isInfixOf` (getText t)) $ Prelude.map pack a
 
 
 
+pairTheorems :: Monad m => Pipe MyLatex MyLatex m ()
+pairTheorems = do t <- await
+                  if isTheorem t
+                     then do t' <- await
+                             if isProof t'
+                                then yield (TheoremProof t t') >> pairTheorems
+                                     else yield t >> yield t' >> pairTheorems
+                          else yield t >> pairTheorems
 
 
 --checkPair xs (t, t') = (isTheorem t && isProof t' && (checkWords xs t || checkWords xs t')) || 
