@@ -23,6 +23,7 @@ library
                        , pipes
                        , pipes-text
                        , pipes-group
+                       , pipes-parse
                        , directory
                        , process
                        , lens
@@ -40,6 +41,7 @@ executable latexSearch-exe
                      , pipes
                      , pipes-text
                      , pipes-group
+                     , pipes-parse
                      , directory
                      , process
                      , lens
@@ -57,6 +59,7 @@ test-suite latexSearch-test
                      , pipes
                      , pipes-text
                      , pipes-group
+                     , pipes-parse
                      , directory
                      , process
                      , lens
