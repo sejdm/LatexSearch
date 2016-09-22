@@ -1,7 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 module LatexSearch (
    searchLatex
-    , searchLatex
     , searchLatexFile
     , searchLatexFiles
     , searchLatexDir
@@ -83,6 +82,10 @@ isEnvKey x = Prelude.any (L.isInfixOf x) ["definition", "theorem", "lemma", "pro
 getName (LatexPar _) = Nothing
 getName (LatexEnv n _) = Just (Prelude.show n)
 
+
+
+checkWords a@(x:xs) (TheoremProof t t') | isEnvKey x = ((L.isInfixOf x <$> getName t) == Just True) && (Prelude.all (`DT.isInfixOf` (getText t `append` getText t')) $ Prelude.map pack xs)
+                                         | otherwise = Prelude.all (`DT.isInfixOf` (getText t `append` getText t')) $ Prelude.map pack a
 checkWords as (TheoremProof t t') = Prelude.all (`DT.isInfixOf` (getText t `append` getText t')) $ Prelude.map pack as
 checkWords a@(x:xs) t | isEnvKey x = ((L.isInfixOf x <$> getName t) == Just True) && (Prelude.all (`DT.isInfixOf` (getText t)) $ Prelude.map pack xs)
                       | otherwise = Prelude.all (`DT.isInfixOf` (getText t)) $ Prelude.map pack a
@@ -104,7 +107,7 @@ pairTheorems = do t <- await
 --checkPair xs (t, t') = (isTheorem t && isProof t' && (checkWords xs t || checkWords xs t')) || 
 
 --latexSearchPipe xs = latexParsePipe >-> PI.filter (checkWords xs) >-> pipeMap (renderLatex)
-latexSearchPipe xs = latexParsePipe >-> PI.filter isNotEmptyPar >->  PI.filter (checkWords xs) >-> pipeMap (renderLatex)
+latexSearchPipe xs = latexParsePipe >-> PI.filter isNotEmptyPar >-> pairTheorems >-> PI.filter (checkWords xs) >-> pipeMap (renderLatex)
 
 --runPipe = runSafeT . runEffect
 searchLatex xs = runSafeT $ runEffect (T.stdin >-> latexSearchPipe xs >-> T.stdout)
