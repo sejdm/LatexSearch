@@ -21,8 +21,6 @@ import qualified Data.Char as C
 import System.Directory
 import Data.List as L
 
---pend = string "\\end{" *> takeTill (=='}') <* char '}'
---penv = (\x y -> LatexEnv x (pack y)) <$> pbegin <*> manyTill anyChar pend
 pbegin = string "\\begin{" *> takeTill (=='}') <* char '}'
 pend n = string $ "\\end{" `append` n `append` "}"
 penv = do n <- pbegin
@@ -83,16 +81,16 @@ isThm (Just x) = isTheorem x
 isPrf Nothing = False
 isPrf (Just x) = isProof x
 
-check x Nothing = return x
-check x y | isThm x && isPrf y = return (Just $ TheoremProof x' y')
-          | otherwise = PP.unDraw y' >> return ( Just x')
-            where Just x' = x
-                  Just y' = y
 
 parseCheck :: Monad m => PP.Parser MyLatex m (Maybe MyLatex)
 parseCheck = do x <- PP.draw
                 y <- PP.draw
                 check x y
+   where check x Nothing = return x
+         check x y | isThm x && isPrf y = return (Just $ TheoremProof x' y')
+                   | otherwise = PP.unDraw y' >> return ( Just x')
+             where Just x' = x
+                   Just y' = y
 
 isNotEmptyPar (LatexPar x) = not $ DT.all (\t -> t=='\n' || t ==' ') x
 isNotEmptyPar _ = True
@@ -111,23 +109,9 @@ checkWords a@(x:xs) t | isEnvKey x = ((L.isInfixOf x <$> getName t) == Just True
 
 
 
-pairTheorems :: Monad m => Pipe MyLatex MyLatex m ()
-pairTheorems = do t <- await
-                  if isTheorem t
-                     then do t' <- await
-                             if isProof t'
-                                then yield (TheoremProof t t') >> pairTheorems
-                                     else yield t >> yield t' >> pairTheorems
-                          else yield t >> pairTheorems
 
-
---checkPair xs (t, t') = (isTheorem t && isProof t' && (checkWords xs t || checkWords xs t')) || 
-
---latexSearchPipe xs = latexParsePipe >-> PI.filter (checkWords xs) >-> pipeMap (renderLatex)
 latexSearchPipe g xs = (PP.parsed_ parseCheck (g >-> latexParsePipe >-> PI.filter isNotEmptyPar) >> return ()) >->  PI.filter (checkWords xs) >-> pipeMap (renderLatex)
--- latexSearchPipe xs = latexParsePipe >->  PI.filter (checkWords xs) >-> pipeMap (renderLatex)
 
---runPipe = runSafeT . runEffect
 searchLatex xs = runSafeT $ runEffect (latexSearchPipe T.stdin xs >-> T.stdout)
 
 
@@ -144,5 +128,3 @@ isTexFile = L.isSuffixOf "tex"
 searchLatexDir d xs = (Prelude.filter isTexFile <$> getDirectoryContents d) >>= flip searchLatexFiles xs . (L.map (d++))
 
 searchLatexDirs ds xs = M.mapM_ (flip searchLatexDir xs) ds
-
---checkParser f = do Partial f <- parse platex <$> TO.readFile f; let Done _ r = f "" in M.mapM_ (Prelude.putStrLn . Prelude.show . render) $ Prelude.filter isTheorem r
