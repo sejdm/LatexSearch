@@ -1,11 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 module LatexSearch (
    searchLatex
-    , searchLatex
-    , searchLatexFile
-    , searchLatexFiles
-    , searchLatexDir
-    , searchLatexDirs
     )
   where
 
@@ -14,6 +9,7 @@ import Data.Attoparsec.Combinator as C
 import Data.Text as DT
 import Control.Applicative
 import Pipes
+import qualified Pipes.Parse as PP
 import Pipes.Text.IO as T
 import Pipes.Prelude as PI
 import Control.Monad as M
@@ -58,17 +54,17 @@ pipeMap f = forever $ await >>= yield . f
 
 render (LatexEnv n t) = DT.map C.toUpper n `append` ": " `append` t `append` "\n\n"
 render (LatexPar t) = "Par:" `append` t `append` "\n\n"
+render (TheoremProof t1 t2) = render t1 `append` "PAIR" `append` render t2
 
 
 renderLatex (LatexEnv n t) = "\\begin{" `append` n `append` "}" `append` t `append` "\\end{" `append` n `append` "}\n\n"
 renderLatex (LatexPar t) = t `append` "\n\n"
-renderLatex (TheoremProof t t') = renderLatex t `append` renderLatex t'
+renderLatex (TheoremProof t t') = renderLatex t `append` "AAAAAAAAAAAAAAAAA" `append` renderLatex t'
 
 isTheorem (LatexEnv "theorem" _) = True
 isTheorem (LatexEnv "lemma" _) = True
 isTheorem (LatexEnv "corollary" _) = True
 isTheorem _ = False
-
 
 isProof (LatexEnv "proof" _) = True
 isProof _ = False
@@ -76,6 +72,25 @@ isProof _ = False
 getText (LatexPar x) = x
 getText (LatexEnv _ x) = x
 
+
+isThm Nothing = False
+isThm (Just x) = isTheorem x
+
+isPrf Nothing = False
+isPrf (Just x) = isProof x
+
+check x y | isThm x && isPrf y = return (TheoremProof x' y')
+          | otherwise = PP.unDraw y' >> return x'
+            where Just x' = x
+                  Just y' = y
+
+parseCheck :: Monad m => PP.Parser MyLatex m (Maybe MyLatex)
+parseCheck = do x <- PP.draw
+                y <- PP.draw
+                Just <$> check x y
+
+isNotEmptyPar (LatexPar x) = not $ DT.all (\t -> t=='\n' || t ==' ') x
+isNotEmptyPar _ = True
 
 isEnvKey :: String -> Bool
 isEnvKey x = Prelude.any (L.isInfixOf x) ["definition", "theorem", "lemma", "proof", "example"]
@@ -102,22 +117,13 @@ pairTheorems = do t <- await
 --checkPair xs (t, t') = (isTheorem t && isProof t' && (checkWords xs t || checkWords xs t')) || 
 
 --latexSearchPipe xs = latexParsePipe >-> PI.filter (checkWords xs) >-> pipeMap (renderLatex)
-latexSearchPipe xs = latexParsePipe >->  PI.filter (checkWords xs) >-> pipeMap (renderLatex)
+latexSearchPipe g xs = (PP.parsed_ parseCheck (g >-> latexParsePipe >-> PI.filter isNotEmptyPar) >> return ()) >->  PI.filter (checkWords xs) >-> pipeMap (render)
+-- latexSearchPipe xs = latexParsePipe >->  PI.filter (checkWords xs) >-> pipeMap (renderLatex)
 
 --runPipe = runSafeT . runEffect
-searchLatex xs = runSafeT $ runEffect (T.stdin >-> latexSearchPipe xs >-> T.stdout)
-
-searchLatexFile f xs = runSafeT $ runEffect (T.readFile f >-> latexSearchPipe xs >-> T.stdout)
+searchLatex xs = runSafeT $ runEffect (latexSearchPipe T.stdin xs >-> T.stdout)
 
 
-searchLatexFiles fs xs = M.mapM_ (flip searchLatexFile xs) fs
-
-isTexFile :: String -> Bool
-isTexFile = L.isSuffixOf "tex"
-
-searchLatexDir d xs = (Prelude.filter isTexFile <$> getDirectoryContents d) >>= flip searchLatexFiles xs . (L.map (d++))
-
-searchLatexDirs ds xs = M.mapM_ (flip searchLatexDir xs) ds
 
 
 --checkParser f = do Partial f <- parse platex <$> TO.readFile f; let Done _ r = f "" in M.mapM_ (Prelude.putStrLn . Prelude.show . render) $ Prelude.filter isTheorem r
