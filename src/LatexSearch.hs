@@ -88,6 +88,8 @@ checkWords a@(x:xs) t | isEnvKey x = ((L.isInfixOf x <$> getName t) == Just True
                       | otherwise = Prelude.all (`DT.isInfixOf` (getText t)) $ Prelude.map pack a
 
 
+isNotEmptyPar (LatexPar x) = not $ DT.all (\t -> t=='\n' || t ==' ') x
+isNotEmptyPar _ = True
 
 pairTheorems :: Monad m => Pipe MyLatex MyLatex m ()
 pairTheorems = do t <- await
@@ -102,7 +104,7 @@ pairTheorems = do t <- await
 --checkPair xs (t, t') = (isTheorem t && isProof t' && (checkWords xs t || checkWords xs t')) || 
 
 --latexSearchPipe xs = latexParsePipe >-> PI.filter (checkWords xs) >-> pipeMap (renderLatex)
-latexSearchPipe xs = latexParsePipe >->  PI.filter (checkWords xs) >-> pipeMap (renderLatex)
+latexSearchPipe xs = latexParsePipe >-> PI.filter isNotEmptyPar >->  PI.filter (checkWords xs) >-> pipeMap (renderLatex)
 
 --runPipe = runSafeT . runEffect
 searchLatex xs = runSafeT $ runEffect (T.stdin >-> latexSearchPipe xs >-> T.stdout)
